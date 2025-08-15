@@ -9,23 +9,43 @@ on:
 
 jobs:
   build_and_deploy_job:
+    # Build & deploy on pushes, and on PRs except when they're being closed
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ubuntu-latest
+    name: Build and Deploy
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
+
+      # Guard: ensure the repo secret exists (without leaking it)
+      - name: Assert SWA token present (no value leaked)
+        env:
+          SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_CIPP }}
+        run: |
+          if [ -z "$SWA_TOKEN" ]; then
+            echo "Repo secret AZURE_STATIC_WEB_APPS_API_TOKEN_CIPP is EMPTY or missing."
+            echo "Set it under Settings → Secrets and variables → Actions → Secrets."
+            exit 1
+          else
+            echo "SWA token length looks OK: ${#SWA_TOKEN} characters"
+          fi
+
+      # Deploy to Azure Static Web Apps
       - uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_CIPP }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
           app_location: "/"
-          output_location: "/out"
+          output_location: "/out"        # CIPP v7 Next.js static export
+          production_branch: main
 
   close_pull_request_job:
+    # Closes preview environments when PRs are closed
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
+    name: Close Pull Request
     steps:
       - uses: Azure/static-web-apps-deploy@v1
         with:
